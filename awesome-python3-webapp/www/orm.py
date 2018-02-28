@@ -26,7 +26,7 @@ async def create_pool(loop, **kw):
         port=kw.get('port', 3306),
         user=kw['user'],
         password=kw['password'],
-        db=kw['db'],
+        db=kw['database'],
         # 这个必须设置,否则,从数据库获取到的结果是乱码的
         charset=kw.get('charset', 'utf8'),
         # 是否自动提交事务,在增删改数据库数据时,如果为True,不需要再commit来提交事务了
