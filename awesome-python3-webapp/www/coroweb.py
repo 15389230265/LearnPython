@@ -248,7 +248,7 @@ def add_routes(app, module_name):
         if attr.startswith('_'):
             continue  # 忽略'_'开头的对象，直接继续for循环
         fn = getattr(mod, attr)
-        # 确保是函数
+        # 确保是函数，对象是否可以被调用
         if callable(fn):
             # 确保视图函数存在method和path
             method = getattr(fn, '__method__', None)

@@ -16,6 +16,8 @@ from config import configs
 import orm
 from coroweb import add_routes, add_static
 
+from handlers import cookie2user, COOKIE_NAME
+
 
 ''''我们使用jinja2作为模板引擎，在新框架中对jinja2模板进行初始化设置。
     初始化jinja2需要以下几步：
@@ -88,6 +90,22 @@ async def logger_factory(app, handler):
     return logger
 
 
+async def auth_factory(app, handler):
+    async def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user = await cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+            return web.HTTPFound('/signin')
+        return (await handler(request))
+    return auth
+
+
 async def data_factory(app, handler):
     async def parse_data(request):
         if request.method == 'POST':
@@ -137,6 +155,7 @@ async def response_factory(app, handler):
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:  # 带模板信息，渲染模板
+                r['__user__'] = request.__user__
                 # app['__templating__']获取已初始化的Environment对象，调用get_template()方法返回Template对象
                 # 调用Template对象的render()方法，传入r渲染模板，返回unicode格式字符串，将其用utf-8编码
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
@@ -158,13 +177,19 @@ async def response_factory(app, handler):
 
 
 async def init(loop):
+    # 建立mysql连接池
     await orm.create_pool(loop=loop, **configs.db)
+    # 建立web链接的处理函数
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, response_factory
+        logger_factory, auth_factory, response_factory
     ])
+    # 初始化jinja2模板 并加上过滤器
     init_jinja2(app, filters=dict(datetime=datetime_filter))
+    # 添加首页模板
     add_routes(app, 'handlers')
+    # 添加静态文件
     add_static(app)
+    # 建立web链接
     srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
